@@ -171,6 +171,8 @@ class Agent(object):
         q = self.qtable[state][action_ix]
         new_q = q + self.learning_rate * (r + self.discount_factor * max(self.qtable[next_state]) - q)
         self.qtable[state][action_ix] = new_q
+        if np.max(np.abs(self.qtable[state])) > 0:
+            self.qtable[state] = self.qtable[state]/np.max(np.abs(self.qtable[state]))
 
     def get_best_action(self,default = 0.01):
         '''Kiválasztja a Q tábla alapján a legjobb lépést'''
