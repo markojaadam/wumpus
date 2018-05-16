@@ -3,6 +3,10 @@
 
 from __future__ import print_function, division
 import numpy as np
+import matplotlib
+matplotlib.use("TkAgg")
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
+from matplotlib.figure import Figure
 
 class Environment(object):
     def __init__(self):
@@ -247,6 +251,11 @@ class GUI(object):
         self.sideframe = tk.Frame(master=self.root)
         self.mainframe.grid(row=0, column=0, padx=20, pady=20)
         self.sideframe.grid(row=0, column=1, padx=20, pady=20)
+
+        Fig = Figure(figsize=(5, 4), dpi=80)
+        FigSubPlot = Fig.add_subplot(111, xlabel='N step', ylabel='Reward rate', xlim=[0,100], ylim = [-10,30])
+        self.line, = FigSubPlot.plot([],[],'r-')
+        self.figcanvas = FigureCanvasTkAgg(Fig, master=self.sideframe)
         self.iternum = tk.Spinbox(self.sideframe, width=10,
                                   values = list(range(100,1001,100))+list(range(2000,10001,1000)),
                                   state = 'readonly')
@@ -260,24 +269,24 @@ class GUI(object):
         self.stopbtn = ttk.Button(master=self.sideframe, text='Stop', command=self.stop, state='disabled')
         self.exitbtn = ttk.Button(master=self.sideframe, text='Exit', command=self.exit)
 
-        ttk.Label(self.sideframe, text="Wins: ", padding=10).grid(row=0, column=0, sticky='e')
-        ttk.Label(self.sideframe, textvariable=self.wins, padding=10).grid(row=0, column=1, sticky='w')
-        ttk.Label(self.sideframe, text="Deaths: ", padding=10).grid(row=1, column=0, sticky='e')
-        ttk.Label(self.sideframe, textvariable=self.deaths, padding=10).grid(row=1, column=1, sticky='w')
-        ttk.Label(self.sideframe, text="Total reward: ", padding=10).grid(row=2, column=0, sticky='e')
-        ttk.Label(self.sideframe, textvariable=self.sumreward, padding=10).grid(row=2, column=1, sticky='w')
-
-        ttk.Label(self.sideframe, text="Learning Rate: ", padding=10).grid(row=3, column=0, sticky='e')
-        self.learnbox.grid(row=3, column=1, sticky='w')
-        ttk.Label(self.sideframe, text="Discount Factor: ", padding=10).grid(row=4, column=0, sticky='e')
-        self.discbox.grid(row=4, column=1, sticky='w')
-        ttk.Label(self.sideframe, text="Random Factor (%): ", padding=10).grid(row=5, column=0, sticky='e')
-        self.randbox.grid(row=5, column=1, sticky='w')
-        ttk.Label(self.sideframe, text="Number of iterations: ", justify='right', padding=10).grid(row=6, column = 0, sticky='e')
-        self.iternum.grid(row=6, column=1, padx=10, sticky='w')
-        self.startbtn.grid(row=7,column=0, padx=10)
-        self.stopbtn.grid(row=7, column=1, padx=10)
-        self.exitbtn.grid(row=8, column=0, columnspan=2, padx=10, pady=10)
+        self.figcanvas.get_tk_widget().grid(row=0, column=0, columnspan=2)
+        ttk.Label(self.sideframe, text="Wins: ", padding=10).grid(row=1, column=0, sticky='e')
+        ttk.Label(self.sideframe, textvariable=self.wins, padding=10).grid(row=1, column=1, sticky='w')
+        ttk.Label(self.sideframe, text="Deaths: ", padding=10).grid(row=2, column=0, sticky='e')
+        ttk.Label(self.sideframe, textvariable=self.deaths, padding=10).grid(row=2, column=1, sticky='w')
+        ttk.Label(self.sideframe, text="Total reward: ", padding=10).grid(row=3, column=0, sticky='e')
+        ttk.Label(self.sideframe, textvariable=self.sumreward, padding=10).grid(row=3, column=1, sticky='w')
+        ttk.Label(self.sideframe, text="Learning Rate: ", padding=10).grid(row=4, column=0, sticky='e')
+        self.learnbox.grid(row=4, column=1, sticky='w')
+        ttk.Label(self.sideframe, text="Discount Factor: ", padding=10).grid(row=5, column=0, sticky='e')
+        self.discbox.grid(row=5, column=1, sticky='w')
+        ttk.Label(self.sideframe, text="Random Factor (%): ", padding=10).grid(row=6, column=0, sticky='e')
+        self.randbox.grid(row=6, column=1, sticky='w')
+        ttk.Label(self.sideframe, text="Number of iterations: ", justify='right', padding=10).grid(row=7, column = 0, sticky='e')
+        self.iternum.grid(row=7, column=1, padx=10, sticky='w')
+        self.startbtn.grid(row=8,column=0, padx=10)
+        self.stopbtn.grid(row=8, column=1, padx=10)
+        self.exitbtn.grid(row=9, column=0, columnspan=2, padx=10, pady=10)
 
         self.world = tk.Canvas(self.mainframe, width=300, height=300)
         self.messagebox = tk.Text(self.mainframe, height=1, width=20, state='disabled', font=('Helvetica', '14'))
@@ -393,6 +402,8 @@ class GUI(object):
 
         self.world.update()
         self.world.after(800)
+        self.figcanvas.figure.axes[0].set_xlim(0,int(self.iternum.get()))
+        cumrewards = []
         for i in range(int(self.iternum.get())):
             if self.stopmode:
                 break
@@ -418,6 +429,10 @@ class GUI(object):
             for stringvar, value in zip([self.wins, self.deaths, self.sumreward],
                                         [self.agent.wins, self.agent.deaths,np.sum(self.agent.history)]):
                 stringvar.set(str(value))
+            cumrewards.append(np.sum(self.agent.history)/i)
+            if not self.stopmode:
+                self.line.set_data(range(i+1),cumrewards)
+                self.figcanvas.draw()
         if not self.stopmode:
             self.stop()
             self.tkMessageBox.showinfo(parent=self.root, message='Exection ended')
