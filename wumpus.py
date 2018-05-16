@@ -12,7 +12,6 @@ class Environment(object):
         self.wumpus_loc = np.array([[0,2]])
         self.pit_locs = np.array([[2,0],[2,2],[3,3]])
         self.gold_loc = np.array([[1,2]])
-
         self.stench_locs = []
         for loc in [[0,1],[1,0],[0,-1],[-1,0]]:
             new_loc = self.wumpus_loc[0]+loc
@@ -51,12 +50,13 @@ class Environment(object):
 
 
 class Agent(object):
-    def __init__(self, Environment, learning_rate=0.5, discount_factor=0.8, debug=False):
+    def __init__(self, Environment, learning_rate=0.5, discount_factor=0.8, random_factor=0.01, debug=False):
         self.env = Environment
         self.start_matrix = self.env.start_matrix.copy()
         self.debug = debug
         self.learning_rate = learning_rate
         self.discount_factor = discount_factor
+        self.random_factor = random_factor
         self.step, self.history, self.action_history = 0, [], []
         self.state = np.array([0,0,1,0]) # Első két bool: x és y koord, 3. van nyílvesszőnk, 4.: szörny kilőve
         self.arrowpos = self.state[:2].copy()
@@ -106,6 +106,8 @@ class Agent(object):
     def reset_knowlegde(self):
         self.qtable = np.zeros(self.env.matrix.shape[:2]+(8,))
         self.rewards = np.zeros(self.env.matrix.shape[:2]+(8,))
+        self.step, self.history, self.action_history = 0, [], []
+        self.wins, self.deaths = 0, 0
 
     def move(self,direction):
         '''Az ágens elmozdul a megadott irányba a mátrixon belül'''
@@ -174,10 +176,10 @@ class Agent(object):
         if np.max(np.abs(self.qtable[state])) > 0:
             self.qtable[state] = self.qtable[state]/np.max(np.abs(self.qtable[state]))
 
-    def get_best_action(self,default = 0.01):
+    def get_best_action(self):
         '''Kiválasztja a Q tábla alapján a legjobb lépést'''
         best = np.random.choice(self.eval_actions())
-        if not np.random.uniform(0,1) < default:
+        if not np.random.uniform(0,1) < self.random_factor:
             available_moves = np.array([self.action_map[a] for a in self.eval_actions()])
             if not (self.qtable[tuple(self.state[:2])][available_moves] == 0).all():
                 max_q_loc = np.where(self.qtable[tuple(self.state[:2])] == \
@@ -198,12 +200,14 @@ class Agent(object):
     def set_discount_factor(self, discount_factor):
         self.discount_factor = discount_factor
 
+    def set_random_factor(self,random_factor):
+        self.random_factor = random_factor
+
 class GUI(object):
     def __init__(self):
         import Tkinter as tk
         import tkMessageBox
         import ttk
-        import time
 
         self.tk = tk
         self.ttk = ttk
@@ -214,58 +218,91 @@ class GUI(object):
 
         self.env = Environment()
         self.agent = Agent(self.env)
+        self.learning_rate = tk.StringVar(self.root)
+        self.discount_factor = tk.StringVar(self.root)
+        self.random_factor = tk.StringVar(self.root)
+        self.wins = tk.StringVar(self.root)
+        self.deaths = tk.StringVar(self.root)
+        self.sumreward = tk.StringVar(self.root)
+        self.learning_rate.set(str(self.agent.learning_rate))
+        self.discount_factor.set(str(self.agent.discount_factor))
+        self.random_factor.set(str(self.agent.random_factor))
+        for stringvar in [self.wins, self.deaths, self.sumreward]:
+            stringvar.set('0')
         self.stopmode = False
-        self.exitcmd = False
 
         self._env_text = dict(enumerate(list('WPSBG')))
         self._env_grid = dict(zip(range(self.env.matrix.shape[-1]),[0, 1, 3, 5, 2]))
         self._env_colors = dict(zip(range(self.env.matrix.shape[-1]), ['red','black','grey','grey','gold']))
 
+        def _create_circle(self, x, y, r, **kwargs):
+            return(self.create_oval(x - r, y - r, x + r, y + r, **kwargs))
+        def _create_triangle(self, x, y, m, **kwargs):
+            return(self.create_polygon(x, y - m / 2, x + m / 2, y, x - m / 2, y, **kwargs))
+        tk.Canvas.create_circle = _create_circle
+        tk.Canvas.create_triangle = _create_triangle
+
+
         self.mainframe = tk.Frame(master=self.root)
         self.sideframe = tk.Frame(master=self.root)
-        self.mainframe.grid(row=0, column=0)
-        self.sideframe.grid(row=0, column=1)
-        self.messagebox = tk.Text(self.sideframe, height=1, width=20)
-        self.iternum = tk.Spinbox(self.sideframe, width=10, values =  list(range(100,1001,100))+list(range(2000,10001,1000)))
-        self.learnbox = tk.Spinbox(self.sideframe, width=10, values= tuple([i/10 for i in range(1,11)]))
-        self.discbox= tk.Spinbox(self.sideframe, width=10, values=tuple([i/10 for i in range(1,11)]))
+        self.mainframe.grid(row=0, column=0, padx=20, pady=20)
+        self.sideframe.grid(row=0, column=1, padx=20, pady=20)
+        self.iternum = tk.Spinbox(self.sideframe, width=10,
+                                  values = list(range(100,1001,100))+list(range(2000,10001,1000)),
+                                  state = 'readonly')
+        self.learnbox = tk.Spinbox(self.sideframe, width=10, from_=0.1, to=1, increment=0.1,
+                                   textvariable = self.learning_rate, state='readonly')
+        self.discbox = tk.Spinbox(self.sideframe, width=10, from_=0.1, to=1, increment=0.1,
+                                  textvariable = self.discount_factor, state='readonly')
+        self.randbox = tk.Spinbox(self.sideframe, width=10, values=list(range(1,11))+list(range(20,101,5)),
+                                 textvariable = self.random_factor, state='readonly')
         self.startbtn = ttk.Button(master=self.sideframe, text='Start', command=self.start_run)
-        self.stopbtn = ttk.Button(master=self.sideframe, text='Stop', command=self.stop)
+        self.stopbtn = ttk.Button(master=self.sideframe, text='Stop', command=self.stop, state='disabled')
         self.exitbtn = ttk.Button(master=self.sideframe, text='Exit', command=self.exit)
 
-        ttk.Label(self.sideframe, text="Learning Rate: ", padding=10).grid(row=0, column=0, sticky='e')
-        self.learnbox.grid(row=0, column=1, sticky='w')
-        ttk.Label(self.sideframe, text="Discount Factor: ", padding=10).grid(row=1, column=0, sticky='e')
-        self.discbox.grid(row=1, column=1, sticky='w')
-        ttk.Label(self.sideframe, text="Number of iterations: ", justify='right', padding=10).grid(row=2, column = 0, sticky='e')
-        self.iternum.grid(row=2, column=1, padx=10, sticky='w')
-        ttk.Label(self.sideframe, text="Message: ", justify='right', padding=10).grid(row=3, column = 0, sticky='e')
-        self.messagebox.grid(row=3, column=1, padx=10, sticky='w')
-        self.startbtn.grid(row=4,column=0, padx=10)
-        self.stopbtn.grid(row=4, column=1, padx=10)
-        self.exitbtn.grid(row=5, column=0, columnspan=2, padx=10, pady=10)
+        ttk.Label(self.sideframe, text="Wins: ", padding=10).grid(row=0, column=0, sticky='e')
+        ttk.Label(self.sideframe, textvariable=self.wins, padding=10).grid(row=0, column=1, sticky='w')
+        ttk.Label(self.sideframe, text="Deaths: ", padding=10).grid(row=1, column=0, sticky='e')
+        ttk.Label(self.sideframe, textvariable=self.deaths, padding=10).grid(row=1, column=1, sticky='w')
+        ttk.Label(self.sideframe, text="Total reward: ", padding=10).grid(row=2, column=0, sticky='e')
+        ttk.Label(self.sideframe, textvariable=self.sumreward, padding=10).grid(row=2, column=1, sticky='w')
 
-        self.world = tk.Canvas(self.mainframe, width=350, height=350)
+        ttk.Label(self.sideframe, text="Learning Rate: ", padding=10).grid(row=3, column=0, sticky='e')
+        self.learnbox.grid(row=3, column=1, sticky='w')
+        ttk.Label(self.sideframe, text="Discount Factor: ", padding=10).grid(row=4, column=0, sticky='e')
+        self.discbox.grid(row=4, column=1, sticky='w')
+        ttk.Label(self.sideframe, text="Random Factor (%): ", padding=10).grid(row=5, column=0, sticky='e')
+        self.randbox.grid(row=5, column=1, sticky='w')
+        ttk.Label(self.sideframe, text="Number of iterations: ", justify='right', padding=10).grid(row=6, column = 0, sticky='e')
+        self.iternum.grid(row=6, column=1, padx=10, sticky='w')
+        self.startbtn.grid(row=7,column=0, padx=10)
+        self.stopbtn.grid(row=7, column=1, padx=10)
+        self.exitbtn.grid(row=8, column=0, columnspan=2, padx=10, pady=10)
+
+        self.world = tk.Canvas(self.mainframe, width=300, height=300)
+        self.messagebox = tk.Text(self.mainframe, height=1, width=20, state='disabled', font=('Helvetica', '14'))
         self.q_move = tk.Canvas(self.mainframe, width=250, height=250)
         self.q_shoot = tk.Canvas(self.mainframe, width=250, height=250)
 
-        ttk.Label(self.mainframe, text="Wumpus World", justify='center', padding=10).grid(row=0, column=0, columnspan=2)
+
+        ttk.Label(self.mainframe, text="Wumpus World", justify='center', padding=10, font=('Helvetica', '14')).grid(row=0, column=0, columnspan=2)
         self.world.grid(row=1, column=0, columnspan=2)
-        ttk.Label(self.mainframe, text="Q value for movements", justify='center', padding=10).grid(row=2,column=0)
-        self.q_move.grid(row=3, column=0, padx=(0, 5))
-        ttk.Label(self.mainframe, text="Q value for shoots", justify='center', padding=10).grid(row=2,column=1)
-        self.q_shoot.grid(row=3, column=1, padx=(5, 0))
+        ttk.Label(self.mainframe, text="Message: ", justify='right', padding=10, font=('Helvetica', '14')).grid(row=2, column = 0, sticky='e')
+        self.messagebox.grid(row=2, column=1, padx=10, sticky='w')
+        ttk.Label(self.mainframe, text="Q value for movements", justify='center', padding=10).grid(row=3,column=0)
+        ttk.Label(self.mainframe, text="Q value for shoots", justify='center', padding=10).grid(row=3,column=1)
+        self.q_move.grid(row=4, column=0, padx=(0, 5))
+        self.q_shoot.grid(row=4, column=1, padx=(5, 0))
         for canvas in [self.world,self.q_move,self.q_shoot]:
             w,h = int(canvas['width']), int(canvas['height'])
             for i in range(4):
                 for j in range(4):
                     canvas.create_rectangle(w*j/4, h*i/4, w*j/4 + w/4, h*i/4 + h/4, fill='white')
 
-
-        def _create_circle(self, x, y, r, **kwargs):
-            return self.create_oval(x - r, y - r, x + r, y + r, **kwargs)
-
-        tk.Canvas.create_circle = _create_circle
+        agent_x0, agent_y0 = self.coord_on_canvas(self.world, 0, 0)
+        arrow_x0, arrow_y0 = self.coord_on_canvas(self.world, 0, 0, 1)
+        self.agent_circle = self.world.create_circle(agent_x0,agent_y0,10,fill='green')
+        self.arrow_triangle = self.world.create_triangle(arrow_x0,arrow_y0,15,fill='red')
         self.world_objs = self.draw_world()
         self.q_m_objs, self.q_s_objs = self.draw_qvalues()
 
@@ -297,7 +334,7 @@ class GUI(object):
     def draw_arrow(self):
         x,y = self.agent.arrowpos
         x0, y0 = self.coord_on_canvas(self.world, x, y, 1)
-        return(self.world.create_circle(x0,y0,5,fill='red'))
+        return(self.world.create_triangle(x0,y0,15,fill='red'))
 
     def draw_qvalues(self):
         grid_dic = dict(zip([3, 0, 1, 2, 7, 4, 5, 6], [3,7,5,1] * 2))
@@ -305,63 +342,26 @@ class GUI(object):
         for i in range(self.agent.qtable.shape[-1]):
             qtable = self.agent.qtable[:,:,i]
             target_canvas = self.q_move if i < 4 else self.q_shoot
+            disabled_moves = {'x0':[3,7], 'xmax':[1,5], 'y0':[0,4], 'ymax':[2,6]}
             for x in range(qtable.shape[0]):
                 for y in range(qtable.shape[1]):
-                    q = qtable[x,y]
-                    text = '%.2f'%q if q < 1000 else '%.0f'%q
-                    c = 'green' if q > 0 else 'red' if q < 0 else 'black'
-                    x0, y0 = self.coord_on_canvas(target_canvas, x, y, grid_dic[i])
-                    if i < 4:
-                        q_m_objs.append(target_canvas.create_text(x0,y0, text=text, fill=c, font=('Helvetica', '8')))
-                    else:
-                        q_s_objs.append(target_canvas.create_text(x0, y0, text=text, fill=c, font=('Helvetica', '8')))
+                    if not ((x==0 and i in disabled_moves['x0']) or
+                            (x==self.env.matrix.shape[0]-1 and i in disabled_moves['xmax']) or
+                            (y==0 and i in disabled_moves['y0']) or
+                            (y == self.env.matrix.shape[1]-1 and i in disabled_moves['ymax'])):
+                        q = qtable[x,y] if abs(qtable[x,y])>=0.01 else 0
+                        cplus = str(int(abs(q)*4)) if int(q*4) else ''
+                        c = 'green'+cplus if q > 0 else 'red'+cplus if q < 0 else 'black'
+                        x0, y0 = self.coord_on_canvas(target_canvas, x, y, grid_dic[i])
+                        if i < 4:
+                            q_m_objs.append(target_canvas.create_text(x0,y0, text='%.2f'%q, fill=c, font=('Helvetica', '8')))
+                        else:
+                            q_s_objs.append(target_canvas.create_text(x0, y0, text='%.2f'%q, fill=c, font=('Helvetica', '8')))
         return(q_m_objs,q_s_objs)
 
-
-    def start_run(self):
-        self.stopmode = False
-        self.agent.reset_state()
-        self.agent.reset_knowlegde()
-        self.agent.set_learning_rate(float(self.learnbox.get()))
-        self.agent.set_discount_factor(float(self.discbox.get()))
-        self.clear_world()
-        self.clear_qtables()
-        self.world_objs = self.draw_world()
-        self.q_m_objs, self.q_s_objs = self.draw_qvalues()
-        agent_circle = self.draw_agent()
-        arrow_circle = self.draw_arrow()
-        self.world.update()
-        self.world.after(1000)
-        for i in range(int(self.iternum.get())):
-            if self.stopmode:
-                break
-            self.world.after(10)
-            a = self.agent.get_best_action()
-            result = self.agent.take_action(a)
-            self.clear_world()
-            self.clear_qtables()
-            self.world.delete(agent_circle)
-            self.world.delete(arrow_circle)
-            self.world_objs = self.draw_world()
-            self.q_m_objs, self.q_s_objs = self.draw_qvalues()
-            agent_circle = self.draw_agent()
-            if self.agent.arrowpos is not None:
-                arrow_circle = self.draw_arrow()
-            self.messagebox.delete('1.0', 'end')
-            self.messagebox.insert('1.0',result)
-            self.world.update()
-            if result != 'nope':
-                self.world.after(490)
-        if not self.stopmode:
-            self.tkMessageBox.showinfo(message='Exection ended')
-        if not self.exitcmd:
-            self.clear_world()
-            self.world.delete(agent_circle)
-            self.world.delete(arrow_circle)
-            self.messagebox.delete('0.1','end')
-
-
     def clear_world(self):
+        self.world.delete(self.agent_circle)
+        self.world.delete(self.arrow_triangle)
         for wo in self.world_objs:
             self.world.delete(wo)
 
@@ -371,13 +371,83 @@ class GUI(object):
         for qso in self.q_s_objs:
             self.q_shoot.delete(qso)
 
+    def start_run(self):
+        for obj in [self.startbtn, self.learnbox, self.discbox, self.randbox, self.iternum]:
+            obj.configure(state='disabled')
+        self.stopbtn.configure(state='enabled')
+
+        self.stopmode = False
+        self.agent.set_learning_rate(float(self.learning_rate.get()))
+        self.agent.set_discount_factor(float(self.discount_factor.get()))
+        self.agent.set_random_factor(float(self.random_factor.get())/100)
+        self.clear_world()
+        self.clear_qtables()
+        self.q_m_objs, self.q_s_objs = self.draw_qvalues()
+
+        # self.q_m_objs, self.q_s_objs = self.draw_qvalues()
+        agent_x0, agent_y0 = self.coord_on_canvas(self.world, 0, 0)
+        arrow_x0, arrow_y0 = self.coord_on_canvas(self.world, 0, 0, 1)
+        self.agent_circle = self.world.create_circle(agent_x0,agent_y0,10,fill='green')
+        self.arrow_triangle = self.world.create_triangle(arrow_x0,arrow_y0,15,fill='red')
+        self.world_objs = self.draw_world()
+
+        self.world.update()
+        self.world.after(800)
+        for i in range(int(self.iternum.get())):
+            if self.stopmode:
+                break
+            self.world.after(10)
+            a = self.agent.get_best_action()
+            result = self.agent.take_action(a)
+
+            self.clear_world()
+            self.clear_qtables()
+            self.world_objs = self.draw_world()
+            self.q_m_objs, self.q_s_objs = self.draw_qvalues()
+            self.agent_circle = self.draw_agent()
+            if self.agent.arrowpos is not None:
+                self.arrow_triangle = self.draw_arrow()
+            self.world.update()
+            self.messagebox.config(state='normal')
+            self.messagebox.delete('1.0', 'end')
+            self.messagebox.insert('1.0',result if result != 'nope' else '')
+            self.messagebox.config(state='disabled')
+            self.messagebox.update()
+            if result != 'nope':
+                self.mainframe.after(490)
+            for stringvar, value in zip([self.wins, self.deaths, self.sumreward],
+                                        [self.agent.wins, self.agent.deaths,np.sum(self.agent.history)]):
+                stringvar.set(str(value))
+        if not self.stopmode:
+            self.stop()
+            self.tkMessageBox.showinfo(parent=self.root, message='Exection ended')
+        else:
+            self.tkMessageBox.showinfo(parent=self.root, message='Exection interrupted')
+
+
     def stop(self):
         self.stopmode = True
+        self.agent.reset_state()
+        self.agent.reset_knowlegde()
+        self.clear_world()
+        self.world.delete(self.agent_circle)
+        self.world.delete(self.arrow_triangle)
+        agent_x0, agent_y0 = self.coord_on_canvas(self.world, 0, 0)
+        arrow_x0, arrow_y0 = self.coord_on_canvas(self.world, 0, 0, 1)
+        self.agent_circle = self.world.create_circle(agent_x0, agent_y0, 10, fill='green')
+        self.arrow_triangle = self.world.create_triangle(arrow_x0, arrow_y0, 15, fill='red')
+        self.world_objs = self.draw_world()
+        self.messagebox.config(state='normal')
+        self.messagebox.delete('0.1', 'end')
+        self.messagebox.config(state='disabled')
+        for obj in [self.startbtn, self.learnbox, self.discbox, self.randbox, self.iternum]:
+            obj.configure(state='readonly')
+        self.stopbtn.configure(state='disabled')
 
     def exit(self):
-        self.exitcmd = True
-        self.stop()
-        self.root.destroy()
+        if self.tkMessageBox.askokcancel(parent=self.root, title='Quit', message='Do you really want to quit?'):
+            self.stop()
+            self.root.destroy()
 
     def main_loop(self):
         self.root.mainloop()
