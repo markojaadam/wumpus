@@ -144,18 +144,16 @@ class Agent(object):
         '''Kilövi a nyilat a megadott irányba'''
         action_ix = self.action_map['shoot_'+direction]
         self.state[2] = 0 # Nyíl kilőve
-        wumpus_died = False
-        while not (np.sum(self.arrowpos < 0) or sum(self.arrowpos >= self.env.matrix.shape[:2])):
-            if (self.arrowpos == self.env.wumpus_loc[0]).all(): # A szörny meghalt: +10
-                result = 'Wumpus died!'
-                if self.debug: print('Wumpus died.')
-                self.state[3] = 1
-                self.env.kill_wumpus()
-                self.rewards[(tuple(self.state[:2]))][action_ix] = self.reward_dic['wumpus_killed']
-                self.history.append(self.reward_dic['wumpus_killed'])
-                wumpus_died = True
-            self.arrowpos += self.dir_dic[direction]
-        if not wumpus_died: # Kilőttük a nyilat, de nem történt semmi
+        self.arrowpos += self.dir_dic[direction]
+        if (self.arrowpos == self.env.wumpus_loc[0]).all(): # A szörny meghalt: +10
+            result = 'Wumpus died!'
+            if self.debug: print('Wumpus died.')
+            self.state[3] = 1
+            self.env.kill_wumpus()
+            self.rewards[(tuple(self.state[:2]))][action_ix] = self.reward_dic['wumpus_killed']
+            self.history.append(self.reward_dic['wumpus_killed'])
+            wumpus_died = True
+        else: # Kilőttük a nyilat, de nem történt semmi
             result = 'nope'
             if self.debug: print('Nothing happened.')
             self.history.append(self.reward_dic['nothing'])
