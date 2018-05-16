@@ -50,7 +50,8 @@ class Environment(object):
 
 
 class Agent(object):
-    def __init__(self, Environment, learning_rate=0.5, discount_factor=0.8, random_factor=0.01, debug=False):
+    def __init__(self, Environment, learning_rate=0.5, discount_factor=0.8, random_factor=0.01,
+                 reward_dic = [('win',100),('wumpus_killed',10),('death',-10),('nothing',-1)], debug=False):
         self.env = Environment
         self.start_matrix = self.env.start_matrix.copy()
         self.debug = debug
@@ -63,6 +64,7 @@ class Agent(object):
         self.map = np.zeros(self.env.matrix.shape)
         self.qtable = np.zeros(self.env.matrix.shape[:2]+(8,)) # A térkép minden pontján minden cselekvésre értéket tárol
         self.rewards = np.zeros(self.env.matrix.shape[:2]+(8,)) # A térkép minden pontján minden cselekvésre értéket tárol
+        self.reward_dic = dict(reward_dic)
         self.dir_dic = {'left':[-1,0],'right':[1,0],'down':[0,-1],'up':[0,1]} # Irányok kódolása
         actions = ['move_' + d for d in self.dir_dic.keys()] + ['shoot_' + d for d in self.dir_dic.keys()]
         self.action_map = dict([(j,i) for (i,j) in enumerate(actions)]) # Akciók kódolása
@@ -119,21 +121,21 @@ class Agent(object):
         if obj[0] == 1 or obj[1] == 1: # szörnyre, vagy szakadékba lép: -10
             result = 'You died!'
             if self.debug: print('You died on %s.'%self.state[:2])
-            self.history.append(-10)
+            self.history.append(self.reward_dic['death'])
             self.reset_state()
-            self.rewards[(tuple(oldpos))][action_ix] = -10
+            self.rewards[(tuple(oldpos))][action_ix] = self.reward_dic['death']
             self.deaths += 1
         elif obj[4] == 1: # Aranyat talál: +100
             result = 'Gold found!'
             if self.debug: print('You won on %s.'%self.state[:2])
-            self.history.append(100)
+            self.history.append(self.reward_dic['win'])
             self.reset_state()
-            self.rewards[(tuple(oldpos))][action_ix] = 100
+            self.rewards[(tuple(oldpos))][action_ix] = self.reward_dic['win']
             self.wins += 1
         else: # Nem történik semmi: -1
             result = 'nope'
-            self.history.append(-1)
-            self.rewards[(tuple(oldpos))][action_ix] = -1
+            self.history.append(self.reward_dic['nothing'])
+            self.rewards[(tuple(oldpos))][action_ix] = self.reward_dic['nothing']
         self.update_qtable(oldpos,self.state[:2],action_ix)
         self.update_arrowpos()
         return(result)
@@ -149,15 +151,15 @@ class Agent(object):
                 if self.debug: print('Wumpus died.')
                 self.state[3] = 1
                 self.env.kill_wumpus()
-                self.rewards[(tuple(self.state[:2]))][action_ix] = 10
-                self.history.append(10)
+                self.rewards[(tuple(self.state[:2]))][action_ix] = self.reward_dic['wumpus_killed']
+                self.history.append(self.reward_dic['wumpus_killed'])
                 wumpus_died = True
             self.arrowpos += self.dir_dic[direction]
         if not wumpus_died: # Kilőttük a nyilat, de nem történt semmi
             result = 'nope'
             if self.debug: print('Nothing happened.')
-            self.history.append(-1)
-            self.rewards[(tuple(self.state[:2]))][action_ix] = -1
+            self.history.append(self.reward_dic['nothing'])
+            self.rewards[(tuple(self.state[:2]))][action_ix] = self.reward_dic['nothing']
         self.update_qtable(self.state[:2],self.state[:2],action_ix)
         self.arrowpos = None
         return(result)
