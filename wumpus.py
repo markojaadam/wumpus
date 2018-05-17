@@ -230,6 +230,7 @@ class GUI(object):
         self.wins = tk.StringVar(self.root)
         self.deaths = tk.StringVar(self.root)
         self.sumreward = tk.StringVar(self.root)
+        self.pause_on_evet = tk.BooleanVar(self.root)
         self.learning_rate.set(str(self.agent.learning_rate))
         self.discount_factor.set(str(self.agent.discount_factor))
         self.random_factor.set(str(self.agent.random_factor))
@@ -270,6 +271,7 @@ class GUI(object):
                                   textvariable = self.discount_factor, state='readonly')
         self.randbox = tk.Spinbox(self.sideframe, width=10, values=list(range(1,11))+list(range(20,101,5)),
                                  textvariable = self.random_factor, state='readonly')
+        self.pausebox = tk.Checkbutton(self.sideframe, text="Pause on event", variable=self.pause_on_evet)
         self.startbtn = ttk.Button(master=self.sideframe, text='Start (F5)', command=self.start_run)
         self.stopbtn = ttk.Button(master=self.sideframe, text='Stop (F6)', command=self.stop, state='disabled')
         self.exitbtn = ttk.Button(master=self.sideframe, text='Exit', command=self.exit)
@@ -293,9 +295,10 @@ class GUI(object):
         ttk.Label(self.sideframe, text="Number of iterations: ", justify='right', padding=10).grid(row=7, column = 0, sticky='e')
         self.iterbox.grid(row=7, column=1, padx=10, sticky='w')
         self.startbtn.grid(row=8,column=0, padx=10, pady=5)
-        self.stopbtn.grid(row=8, column=1, padx=10, pady=5)
-        self.resetbtn.grid(row=9, column=0, padx=10, pady=5)
+        self.resetbtn.grid(row=8, column=1, padx=10, pady=5)
+        self.stopbtn.grid(row=9, column=0, padx=10, pady=5)
         self.histbtn.grid(row=9, column=1, padx=10, pady=5)
+        self.pausebox.grid(row=10, column=0, padx=10, pady=5)
         self.exitbtn.grid(row=10, column=1, padx=10, pady=5)
         self.root.bind('<F5>', self.start_run)
 
@@ -465,7 +468,7 @@ class GUI(object):
             self.messagebox.insert('1.0',result if result != 'nope' else '')
             self.messagebox.config(state='disabled')
             self.messagebox.update()
-            if result != 'nope':
+            if result != 'nope' and self.pause_on_evet.get():
                 self.mainframe.after(490)
             for stringvar, value in zip([self.wins, self.deaths, self.sumreward],
                                         [self.agent.wins, self.agent.deaths,np.sum(self.agent.history)]):
