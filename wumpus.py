@@ -219,6 +219,7 @@ class GUI(object):
         self.tkMessageBox = tkMessageBox
 
         self.root = tk.Tk()
+        self.root.protocol('WM_DELETE_WINDOW', self.exit)
         self.root.title('Q learning in Wumpus World')
 
         self.env = Environment()
@@ -269,11 +270,12 @@ class GUI(object):
                                   textvariable = self.discount_factor, state='readonly')
         self.randbox = tk.Spinbox(self.sideframe, width=10, values=list(range(1,11))+list(range(20,101,5)),
                                  textvariable = self.random_factor, state='readonly')
-        self.startbtn = ttk.Button(master=self.sideframe, text='Start', command=self.start_run)
-        self.stopbtn = ttk.Button(master=self.sideframe, text='Stop', command=self.stop, state='disabled')
+        self.startbtn = ttk.Button(master=self.sideframe, text='Start (F5)', command=self.start_run)
+        self.stopbtn = ttk.Button(master=self.sideframe, text='Stop (F6)', command=self.stop, state='disabled')
         self.exitbtn = ttk.Button(master=self.sideframe, text='Exit', command=self.exit)
         self.resetbtn = ttk.Button(master=self.sideframe, text='Reset plot', command = self.reset_plot)
-        self.histbtn = ttk.Button(master=self.sideframe, text='Show history', command = self.show_plot_history)
+        self.histbtn = ttk.Button(master=self.sideframe, text='Show history', command = self.show_plot_history,
+                                  state='disabled')
 
         self.figcanvas.get_tk_widget().grid(row=0, column=0, columnspan=2)
         ttk.Label(self.sideframe, text="Wins: ", padding=10).grid(row=1, column=0, sticky='e')
@@ -295,7 +297,7 @@ class GUI(object):
         self.resetbtn.grid(row=9, column=0, padx=10, pady=5)
         self.histbtn.grid(row=9, column=1, padx=10, pady=5)
         self.exitbtn.grid(row=10, column=1, padx=10, pady=5)
-
+        self.root.bind('<F5>', self.start_run)
 
         self.world = tk.Canvas(self.mainframe, width=300, height=300)
         self.messagebox = tk.Text(self.mainframe, height=1, width=20, state='disabled', font=('Helvetica', '14'))
@@ -389,13 +391,13 @@ class GUI(object):
         for qso in self.q_s_objs:
             self.q_shoot.delete(qso)
 
-    def show_plot_history(self):
+    def show_plot_history(self, event=None):
         self.root.option_add('*Dialog.msg.font', 'Helvetica 9')
         self.tkMessageBox.showinfo(parent=self.root, title='Plot history',
                                    message=('\n').join(self.plot_history))
         self.root.option_clear()
 
-    def reset_plot(self):
+    def reset_plot(self, event=None):
         self.run_no, self.lines, self.plot_history = 0, [], []
         self.figcanvas.figure.axes[0].cla()
         self.figcanvas.figure.axes[0].set_ylim([-10, 30])
@@ -403,8 +405,11 @@ class GUI(object):
         self.figcanvas.figure.axes[0].set_xlabel('N step')
         self.figcanvas.figure.axes[0].set_ylabel('Reward rate')
         self.figcanvas.draw()
+        self.histbtn.configure(state='disabled')
 
-    def start_run(self):
+    def start_run(self, event=None):
+        self.root.unbind('<F5>')
+        self.root.bind('<F6>', self.stop)
         if self.run_no >= len(self._colors):
             self.reset_plot()
         self.run_no += 1
@@ -413,9 +418,10 @@ class GUI(object):
         line, = self.FigSubPlot.plot([], [], self._colors[self.run_no-1]+'-')
         self.lines.append(line)
         self.FigSubPlot.legend(["Run %s"%i for i in range(1,self.run_no+1)])
-        self.plot_history.append("Run %s - Learning rate: %.1f, Discount factor: %.1f"%(self.run_no,
-                                                                                   float(self.learnbox.get()),
-                                                                                   float(self.discbox.get())))
+        self.plot_history.append("Run %s - LR: %.1f, DF: %.1f, RF: %.0f"%(self.run_no,
+                                                                        float(self.learnbox.get()),
+                                                                        float(self.discbox.get()),
+                                                                        float(self.randbox.get())))
 
         for obj in [self.startbtn, self.learnbox, self.discbox, self.randbox,
                     self.iterbox, self.resetbtn, self.histbtn, self.exitbtn]:
@@ -470,13 +476,15 @@ class GUI(object):
                 self.figcanvas.draw()
         if not self.stopmode:
             self.stop()
-            self.tkMessageBox.showinfo(parent=self.root, title='Info', message='Exection ended')
+            self.tkMessageBox.showinfo(parent=self.root, title='Info', message='Execution ended')
         else:
-            self.tkMessageBox.showinfo(parent=self.root, title='Info', message='Exection interrupted')
+            self.tkMessageBox.showinfo(parent=self.root, title='Info', message='Execution interrupted')
+        self.root.bind('<F5>', self.start_run)
 
 
-    def stop(self):
+    def stop(self, event=None):
         self.stopmode = True
+        self.root.unbind('<F6>')
         self.agent.reset_state()
         self.agent.reset_knowlegde()
         self.clear_world()
@@ -495,12 +503,21 @@ class GUI(object):
             obj.configure(state='readonly')
         self.stopbtn.configure(state='disabled')
 
-    def exit(self):
+    def exit(self, event=None):
         if self.tkMessageBox.askokcancel(parent=self.root, title='Quit', message='Do you really want to quit?'):
             self.stop()
             self.root.destroy()
 
     def main_loop(self):
+        # Center the window and set the minimal size
+        self.root.update()
+        w, h = self.root.winfo_screenwidth(), self.root.winfo_screenheight()
+        size = tuple(int(numb)+30 for numb in self.root.geometry().split('+')[0].split('x'))
+        x = w/2 - size[0]/2
+        y = h/2 - size[1]/2
+        self.root.geometry("%dx%d+%d+%d" % (size + (x, y)))
+        self.root.update()
+        self.root.minsize(self.root.winfo_width(), self.root.winfo_height())
         self.root.mainloop()
 
 if __name__ == '__main__':
