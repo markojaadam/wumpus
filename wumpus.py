@@ -7,6 +7,7 @@ import matplotlib
 matplotlib.use("TkAgg")
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
 from matplotlib.figure import Figure
+from matplotlib import colors as mcolors
 
 class Environment(object):
     def __init__(self):
@@ -234,6 +235,10 @@ class GUI(object):
         for stringvar in [self.wins, self.deaths, self.sumreward]:
             stringvar.set('0')
         self.stopmode = False
+        self.run_no, self.lines, self.plot_history = 0, [], []
+        self._colors = list(mcolors.BASE_COLORS)
+        self._colors.remove('w')
+        np.random.shuffle(self._colors)
 
         self._env_text = dict(enumerate(list('WPSBG')))
         self._env_grid = dict(zip(range(self.env.matrix.shape[-1]),[0, 1, 3, 5, 2]))
@@ -253,10 +258,9 @@ class GUI(object):
         self.sideframe.grid(row=0, column=1, padx=20, pady=20)
 
         Fig = Figure(figsize=(5, 4), dpi=80)
-        FigSubPlot = Fig.add_subplot(111, xlabel='N step', ylabel='Reward rate', xlim=[0,100], ylim = [-10,30])
-        self.line, = FigSubPlot.plot([],[],'r-')
+        self.FigSubPlot = Fig.add_subplot(111, xlabel='N step', ylabel='Reward rate', xlim=[1,101], ylim = [-10,30])
         self.figcanvas = FigureCanvasTkAgg(Fig, master=self.sideframe)
-        self.iternum = tk.Spinbox(self.sideframe, width=10,
+        self.iterbox = tk.Spinbox(self.sideframe, width=10,
                                   values = list(range(100,1001,100))+list(range(2000,10001,1000)),
                                   state = 'readonly')
         self.learnbox = tk.Spinbox(self.sideframe, width=10, from_=0.1, to=1, increment=0.1,
@@ -268,6 +272,8 @@ class GUI(object):
         self.startbtn = ttk.Button(master=self.sideframe, text='Start', command=self.start_run)
         self.stopbtn = ttk.Button(master=self.sideframe, text='Stop', command=self.stop, state='disabled')
         self.exitbtn = ttk.Button(master=self.sideframe, text='Exit', command=self.exit)
+        self.resetbtn = ttk.Button(master=self.sideframe, text='Reset plot', command = self.reset_plot)
+        self.histbtn = ttk.Button(master=self.sideframe, text='Show history', command = self.show_plot_history)
 
         self.figcanvas.get_tk_widget().grid(row=0, column=0, columnspan=2)
         ttk.Label(self.sideframe, text="Wins: ", padding=10).grid(row=1, column=0, sticky='e')
@@ -283,10 +289,13 @@ class GUI(object):
         ttk.Label(self.sideframe, text="Random Factor (%): ", padding=10).grid(row=6, column=0, sticky='e')
         self.randbox.grid(row=6, column=1, sticky='w')
         ttk.Label(self.sideframe, text="Number of iterations: ", justify='right', padding=10).grid(row=7, column = 0, sticky='e')
-        self.iternum.grid(row=7, column=1, padx=10, sticky='w')
-        self.startbtn.grid(row=8,column=0, padx=10)
-        self.stopbtn.grid(row=8, column=1, padx=10)
-        self.exitbtn.grid(row=9, column=0, columnspan=2, padx=10, pady=10)
+        self.iterbox.grid(row=7, column=1, padx=10, sticky='w')
+        self.startbtn.grid(row=8,column=0, padx=10, pady=5)
+        self.stopbtn.grid(row=8, column=1, padx=10, pady=5)
+        self.resetbtn.grid(row=9, column=0, padx=10, pady=5)
+        self.histbtn.grid(row=9, column=1, padx=10, pady=5)
+        self.exitbtn.grid(row=10, column=1, padx=10, pady=5)
+
 
         self.world = tk.Canvas(self.mainframe, width=300, height=300)
         self.messagebox = tk.Text(self.mainframe, height=1, width=20, state='disabled', font=('Helvetica', '14'))
@@ -380,8 +389,36 @@ class GUI(object):
         for qso in self.q_s_objs:
             self.q_shoot.delete(qso)
 
+    def show_plot_history(self):
+        self.root.option_add('*Dialog.msg.font', 'Helvetica 9')
+        self.tkMessageBox.showinfo(parent=self.root, title='Plot history',
+                                   message=('\n').join(self.plot_history))
+        self.root.option_clear()
+
+    def reset_plot(self):
+        self.run_no, self.lines, self.plot_history = 0, [], []
+        self.figcanvas.figure.axes[0].cla()
+        self.figcanvas.figure.axes[0].set_ylim([-10, 30])
+        self.figcanvas.figure.axes[0].set_xlim(1, int(self.iterbox.get())+0)
+        self.figcanvas.figure.axes[0].set_xlabel('N step')
+        self.figcanvas.figure.axes[0].set_ylabel('Reward rate')
+        self.figcanvas.draw()
+
     def start_run(self):
-        for obj in [self.startbtn, self.learnbox, self.discbox, self.randbox, self.iternum]:
+        if self.run_no >= len(self._colors):
+            self.reset_plot()
+        self.run_no += 1
+        self.figcanvas.figure.axes[0].set_xlim(1, int(self.iterbox.get())+1)
+        self.lines = [] if self.run_no == 0 else self.lines
+        line, = self.FigSubPlot.plot([], [], self._colors[self.run_no-1]+'-')
+        self.lines.append(line)
+        self.FigSubPlot.legend(["Run %s"%i for i in range(1,self.run_no+1)])
+        self.plot_history.append("Run %s - Learning rate: %.1f, Discount factor: %.1f"%(self.run_no,
+                                                                                   float(self.learnbox.get()),
+                                                                                   float(self.discbox.get())))
+
+        for obj in [self.startbtn, self.learnbox, self.discbox, self.randbox,
+                    self.iterbox, self.resetbtn, self.histbtn, self.exitbtn]:
             obj.configure(state='disabled')
         self.stopbtn.configure(state='enabled')
 
@@ -393,7 +430,6 @@ class GUI(object):
         self.clear_qtables()
         self.q_m_objs, self.q_s_objs = self.draw_qvalues()
 
-        # self.q_m_objs, self.q_s_objs = self.draw_qvalues()
         agent_x0, agent_y0 = self.coord_on_canvas(self.world, 0, 0)
         arrow_x0, arrow_y0 = self.coord_on_canvas(self.world, 0, 0, 1)
         self.agent_circle = self.world.create_circle(agent_x0,agent_y0,10,fill='green')
@@ -402,9 +438,8 @@ class GUI(object):
 
         self.world.update()
         self.world.after(800)
-        self.figcanvas.figure.axes[0].set_xlim(0,int(self.iternum.get()))
         cumrewards = []
-        for i in range(int(self.iternum.get())):
+        for i in range(int(self.iterbox.get())):
             if self.stopmode:
                 break
             self.world.after(10)
@@ -429,15 +464,15 @@ class GUI(object):
             for stringvar, value in zip([self.wins, self.deaths, self.sumreward],
                                         [self.agent.wins, self.agent.deaths,np.sum(self.agent.history)]):
                 stringvar.set(str(value))
-            cumrewards.append(np.sum(self.agent.history)/i)
+            cumrewards.append(np.sum(self.agent.history)/(i+1))
             if not self.stopmode:
-                self.line.set_data(range(i+1),cumrewards)
+                self.lines[self.run_no - 1].set_data(range(1, i + 2), cumrewards)
                 self.figcanvas.draw()
         if not self.stopmode:
             self.stop()
-            self.tkMessageBox.showinfo(parent=self.root, message='Exection ended')
+            self.tkMessageBox.showinfo(parent=self.root, title='Info', message='Exection ended')
         else:
-            self.tkMessageBox.showinfo(parent=self.root, message='Exection interrupted')
+            self.tkMessageBox.showinfo(parent=self.root, title='Info', message='Exection interrupted')
 
 
     def stop(self):
@@ -455,7 +490,8 @@ class GUI(object):
         self.messagebox.config(state='normal')
         self.messagebox.delete('0.1', 'end')
         self.messagebox.config(state='disabled')
-        for obj in [self.startbtn, self.learnbox, self.discbox, self.randbox, self.iternum]:
+        for obj in [self.startbtn, self.learnbox, self.discbox, self.randbox,
+                    self.iterbox, self.resetbtn, self.histbtn, self.exitbtn]:
             obj.configure(state='readonly')
         self.stopbtn.configure(state='disabled')
 
