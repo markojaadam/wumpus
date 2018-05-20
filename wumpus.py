@@ -13,7 +13,7 @@ class Environment(object):
     def __init__(self, rownum=4, colnum=4, default = False):
         # Első két D: koordináta a térképen, harmadik D: mi van a térkép cellájában?
         # [szörny (0/1), szakadék (0/1), bűz (0/1), szellő (0/1), arany (0/1)]
-        exceptions = np.array([[0,0]])
+        exceptions = np.array([[0,0],[0,1],[1,0],[1,1]])
         if default:
             self.rownum = 4
             self.colnum = 4
@@ -27,7 +27,7 @@ class Environment(object):
             self.matrix = np.zeros([self.rownum, self.colnum, 5])
             self.gold_locs = self.generate_locations(1,exceptions)
             exceptions = np.concatenate([self.gold_locs,exceptions])
-            self.wumpus_locs = self.generate_locations(2,exceptions)
+            self.wumpus_locs = self.generate_locations(int(self.rownum/2),exceptions)
 
         self.stench_locs = []
         for wumpus_loc in self.wumpus_locs:
@@ -60,11 +60,12 @@ class Environment(object):
             for i,j in loc:
                 self.matrix[i][j][pos] = 1
 
-    def kill_wumpus(self):
+    def kill_wumpus(self,pos):
         # Eltávolítja a szörnyet a térképről és törli a bűz-jeleket
-        self.matrix[self.wumpus_locs[0,0]][self.wumpus_locs[0,1]][0] = 0 # Wumpus törölve
-        for i,j in self.stench_locs:
-            self.matrix[i][j][2] = 0 # Bűz törölve
+        self.matrix[tuple(pos)][0] = 0
+        for loc in [[0, 1], [1, 0], [0, -1], [-1, 0]]:
+            if not (np.sum(pos + loc < 0) or sum(pos + loc >= self.matrix.shape[:2])):
+                self.matrix[tuple(pos + loc)][2] = 0
 
     def reset_matrix(self):
         # Visszaállítja a térképet az eredeti állapotába
@@ -186,7 +187,7 @@ class Agent(object):
             result = 'Wumpus died!'
             if self.debug: print('Wumpus died.')
             self.state[3] = 1
-            self.env.kill_wumpus()
+            self.env.kill_wumpus(self.arrowpos)
             self.rewards[(tuple(oldstate[:2]))][action_ix] = self.reward_dic['wumpus_killed']
             self.history.append(self.reward_dic['wumpus_killed'])
         else: # Kilőttük a nyilat, de nem történt semmi
@@ -600,7 +601,7 @@ class ParamDlg():
                            'move_nothing': 'Move to an empty cell', 'shoot_nothing': 'Shoot to an empty cell'}
         self.world_paramdic = {"Classic Wumpus World": True, "Random World": False}
         self.reward_values = {'win':100, 'wumpus_killed':10, 'death':-10,
-                           'move_nothing':-1, 'shoot_nothing':-5}
+                           'move_nothing':-1, 'shoot_nothing':-1}
 
         self.reward_vars = dict([(r,self.tk.StringVar()) for r in reward_labeldic.keys()])
         for r in self.reward_vars.keys():
@@ -611,7 +612,7 @@ class ParamDlg():
         self.ttk.Label(master=self.paramdlg,text='World:').grid(row=0,column=0,sticky='e')
         cbox = self.ttk.Combobox(master=self.paramdlg, values=self.world_paramdic.keys(),
                           textvariable=self.world_param,state='readonly')
-        cbox.current(0)
+        cbox.current(1)
         cbox.grid(row=0,column=1,padx=5,pady=5)
         self.ttk.Label(master=self.paramdlg, text='Rewards', font=('Helvetica,16')).grid(row=1, column=0, columnspan=2)
         for i,r in enumerate(self.reward_vars.keys()):
