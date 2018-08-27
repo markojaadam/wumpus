@@ -274,7 +274,10 @@ class GUI(object):
             stringvar.set('0')
         self.stopmode = False
         self.run_no, self.lines, self.plot_history = 0, [], []
-        self._colors = list(mcolors.BASE_COLORS)
+        if matplotlib.__version__ >= '2.0':
+            self._colors = list(mcolors.BASE_COLORS)
+        else:
+            self._colors = ['c', 'b', 'w', 'g', 'y', 'k', 'r', 'm']
         self._colors.remove('w')
         np.random.shuffle(self._colors)
 
