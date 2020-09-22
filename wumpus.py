@@ -5,7 +5,13 @@ from __future__ import print_function, division
 import numpy as np
 import matplotlib
 matplotlib.use("TkAgg")
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import sys
+pyver = sys.version_info.major
+if pyver > 2:
+    from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk
+else:
+    from matplotlib.backends.backend_tkagg import NavigationToolbar2TkAgg
 from matplotlib.figure import Figure
 from matplotlib import colors as mcolors
 
@@ -242,9 +248,14 @@ class Agent(object):
 
 class GUI(object):
     def __init__(self, rownum=6, colnum=6, env_default=False, reward_params=None):
-        import Tkinter as tk
-        import tkMessageBox
-        import ttk
+        if pyver > 2:
+            import tkinter as tk
+            import tkinter.ttk as ttk
+            import tkinter.messagebox as tkMessageBox
+        else:
+            import Tkinter as tk
+            import tkMessageBox
+            import ttk
 
         self.tk = tk
         self.ttk = ttk
@@ -588,9 +599,14 @@ class GUI(object):
 
 class ParamDlg():
     def __init__(self):
-        import Tkinter as tk
-        import ttk
-        import tkMessageBox
+        if pyver > 2:
+            import tkinter as tk
+            import tkinter.ttk as ttk
+            import tkinter.messagebox as tkMessageBox
+        else:
+            import Tkinter as tk
+            import tkMessageBox
+            import ttk
 
         self.tk = tk
         self.ttk = ttk
@@ -613,7 +629,7 @@ class ParamDlg():
         self.OK = False
 
         self.ttk.Label(master=self.paramdlg,text='World:').grid(row=0,column=0,sticky='e')
-        cbox = self.ttk.Combobox(master=self.paramdlg, values=self.world_paramdic.keys(),
+        cbox = self.ttk.Combobox(master=self.paramdlg, values=list(self.world_paramdic.keys()),
                           textvariable=self.world_param,state='readonly')
         cbox.current(1)
         cbox.grid(row=0,column=1,padx=5,pady=5)
